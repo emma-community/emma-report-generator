@@ -12,7 +12,7 @@ This Go application generates CSV reports from data retrieved via the EMMA API. 
 ### Environment Variables
 Set the CREDENTIALS environment variable in the format:
 ```shell
-export CREDENTIALS="clientId1:clientSecret1,clientId2:clientSecret2"
+export CREDENTIALS="296bae89-4ab8-43ec-a239-625ff534e705:00bc1826-ce65-4bfb-bef9-3ede6d1d96e8"
 ```
 ### Building and Running with Docker
 1. Build the Docker image:
@@ -26,7 +26,9 @@ docker run -p 8080:8080 -e CREDENTIALS="$CREDENTIALS" emma-report-generator
 ### Accessing the Service
 Once the container is running, you can access the service at:
 ```shell
-http://localhost:8080/v1/vm-reports
+http://localhost:8080/generate
+http://localhost:8080/list
+http://localhost:8080/download?file=yourfile.csv
 ```
 ### API Endpoint
 - GET /v1/vm-reports

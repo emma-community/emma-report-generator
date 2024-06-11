@@ -5,14 +5,16 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"github.com/dgrijalva/jwt-go"
-	emmaSdk "github.com/emma-community/emma-go-sdk"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/dgrijalva/jwt-go"
+	emmaSdk "github.com/emma-community/emma-go-sdk"
 )
 
 type Credential struct {
@@ -25,8 +27,68 @@ type ErrorResponse struct {
 }
 
 func main() {
-	http.HandleFunc("/v1/vm-reports", generateCSVHandler)
+	http.HandleFunc("/list", listFilesHandler)
+	http.HandleFunc("/generate", generateCSVHandler)
+	http.HandleFunc("/download", downloadFileHandler)
 	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func listFilesHandler(w http.ResponseWriter, r *http.Request) {
+	// Read the directory entries
+	files, err := os.ReadDir(".")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	// Iterate over the directory entries and print the filenames ending with .csv
+	var csvFiles []string
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".csv") {
+			csvFiles = append(csvFiles, file.Name())
+		}
+	}
+	for _, file := range csvFiles {
+		fmt.Fprintln(w, file)
+	}
+}
+
+func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
+	// Get the file name from the URL query
+	fileName := r.URL.Query().Get("file")
+	if fileName == "" {
+		http.Error(w, "file parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	// Construct the file path
+	filePath := filepath.Join(".", fileName)
+
+	// Check if the file exists and is not a directory
+	info, err := os.Stat(filePath)
+	if os.IsNotExist(err) {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+	if info.IsDir() {
+		http.Error(w, "invalid file", http.StatusBadRequest)
+		return
+	}
+
+	// Open the file
+	file, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	// Set the headers for file download
+	w.Header().Set("Content-Disposition", "attachment; filename="+fileName)
+	w.Header().Set("Content-Type", "application/octet-stream")
+
+	// Write the file content to the response
+	http.ServeContent(w, r, fileName, info.ModTime(), file)
 }
 
 func generateCSVHandler(w http.ResponseWriter, r *http.Request) {
@@ -49,16 +111,17 @@ func generateCSVHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filename, err := combineCsvFiles(filenames)
+	_, err = combineCsvFiles(filenames)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error combining CSV files, %s", err.Error()))
 		return
 	}
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment;filename=%s", filename))
-	w.Header().Set("Content-Type", "text/csv")
-	http.ServeFile(w, r, filename)
-	os.Remove(filename)
+	// w.Header().Set("Content-Disposition", fmt.Sprintf("attachment;filename=%s", filename))
+	// w.Header().Set("Content-Type", "text/csv")
+	// http.ServeFile(w, r, filename)
+
+	//os.Remove(filename)
 }
 
 func processCredentials(apiClient *emmaSdk.APIClient, credentials []Credential) ([]string, error) {
