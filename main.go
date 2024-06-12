@@ -11,11 +11,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 type Credential struct {
+	ProjectName  string `json:"projectName"`
 	ClientId     string `json:"clientId"`
 	ClientSecret string `json:"clientSecret"`
 }
@@ -24,24 +26,114 @@ type ErrorResponse struct {
 	Message string `json:"message"`
 }
 
+type FilesListResponse struct {
+	Files []string `json:"files"`
+}
+
 func main() {
-	http.HandleFunc("/v1/vm-reports", generateCSVHandler)
+	http.HandleFunc("/v1/files", listFilesHandler)
+	http.HandleFunc("/v1/generates", generateCSVHandler)
+	http.HandleFunc("/v1/downloads", downloadFileHandler)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
+func listFilesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
+		return
+	}
+
+	response, err := getFilesList()
+
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Marshal the array of filenames into JSON format
+	jsonData, err := json.Marshal(response)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Set Content-Type header and write JSON response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
+}
+
+func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
+		return
+	}
+	// Get the file name from the URL query
+	fileName := r.URL.Query().Get("file")
+	if fileName == "" {
+		respondWithError(w, http.StatusBadRequest, "file parameter is required")
+		return
+	}
+
+	// Construct the file path
+	filePath := filepath.Join("reports", fileName)
+
+	// Check if the file exists and is not a directory
+	info, err := os.Stat(filePath)
+	if os.IsNotExist(err) {
+		respondWithError(w, http.StatusNotFound, "file not found")
+		return
+	}
+	if info.IsDir() {
+		respondWithError(w, http.StatusBadRequest, "invalid file")
+		return
+	}
+
+	// Open the file
+	file, err := os.Open(filePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer file.Close()
+
+	// Set the headers for file download
+	w.Header().Set("Content-Disposition", "attachment; filename="+fileName)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.WriteHeader(http.StatusOK)
+
+	// Write the file content to the response
+	http.ServeContent(w, r, fileName, info.ModTime(), file)
+}
+
 func generateCSVHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondWithError(w, http.StatusMethodNotAllowed, "Method Not Allowed")
+		return
+	}
+
+	newReportsDir := filepath.Join(".", "reports")
+	err := os.MkdirAll(newReportsDir, os.ModePerm)
+
 	credentialsEnv := os.Getenv("CREDENTIALS")
 	credPairs := strings.Split(credentialsEnv, ",")
 
 	var credentials []Credential
 	for _, pair := range credPairs {
-		parts := strings.SplitN(pair, ":", 2)
-		if len(parts) == 2 {
-			credentials = append(credentials, Credential{ClientId: parts[0], ClientSecret: parts[1]})
+		parts := strings.SplitN(pair, ":", 3)
+		if len(parts) == 3 {
+			credentials = append(credentials, Credential{ProjectName: parts[0], ClientId: parts[1], ClientSecret: parts[2]})
 		}
 	}
 
-	apiClient := emmaSdk.NewAPIClient(emmaSdk.NewConfiguration())
+	apiClient := emmaSdk.NewAPIClient(&emmaSdk.Configuration{
+		DefaultHeader: make(map[string]string),
+		UserAgent:     "OpenAPI-Generator/0.0.1/go",
+		Debug:         false,
+		Servers: emmaSdk.ServerConfigurations{
+			{URL: "https://customer-gateway.dev.emma.ms", Description: "Public EMMA API"},
+		},
+	})
 
 	filenames, err := processCredentials(apiClient, credentials)
 	if err != nil {
@@ -49,19 +141,59 @@ func generateCSVHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filename, err := combineCsvFiles(filenames)
+	resultFilename := "reports/vm-report.csv"
+
+	err = combineCsvFiles(filenames, resultFilename)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error combining CSV files, %s", err.Error()))
 		return
 	}
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment;filename=%s", filename))
-	w.Header().Set("Content-Type", "text/csv")
-	http.ServeFile(w, r, filename)
-	os.Remove(filename)
+	response, err := getFilesList()
+
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Marshal the array of filenames into JSON format
+	jsonData, err := json.Marshal(response)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Set Content-Type header and write JSON response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
+}
+
+func getFilesList() (*FilesListResponse, error) {
+	// Read the directory entries
+	files, err := os.ReadDir("reports")
+	if err != nil {
+		return nil, err
+	}
+
+	// Iterate over the directory entries and print the filenames ending with .csv
+	var csvFiles []string
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".csv") {
+			csvFiles = append(csvFiles, file.Name())
+		}
+	}
+	fileNames := make([]string, 0)
+	for _, file := range csvFiles {
+		fileNames = append(fileNames, file)
+	}
+
+	return &FilesListResponse{Files: fileNames}, nil
 }
 
 func processCredentials(apiClient *emmaSdk.APIClient, credentials []Credential) ([]string, error) {
+	newReportsDir := filepath.Join(".", "temp-reports")
+	os.MkdirAll(newReportsDir, os.ModePerm)
 	var filenames []string
 	for _, cred := range credentials {
 		token, err := getToken(apiClient, cred.ClientId, cred.ClientSecret)
@@ -83,17 +215,17 @@ func processCredentials(apiClient *emmaSdk.APIClient, credentials []Credential) 
 			continue
 		}
 
-		filename := fmt.Sprintf("temp_report_%s_%s_%s.csv", companyId, projectId, time.Now().UTC().Format(time.RFC3339))
+		filename := fmt.Sprintf("temp-reports/temp_report_%s_%s_%s.csv", companyId, projectId, time.Now().UTC().Format(time.RFC3339))
 		filenames = append(filenames, filename)
 
-		if err := writeCsvFile(filename, vmsData); err != nil {
+		if err := writeCsvFile(filename, vmsData, cred.ProjectName); err != nil {
 			return nil, fmt.Errorf("could not create file: %s", err.Error())
 		}
 	}
 	return filenames, nil
 }
 
-func writeCsvFile(filename string, vmsData []map[string]interface{}) error {
+func writeCsvFile(filename string, vmsData []map[string]interface{}, projectName string) error {
 	file, err := os.Create(filename)
 	if err != nil {
 		return err
@@ -120,11 +252,17 @@ func writeCsvFile(filename string, vmsData []map[string]interface{}) error {
 		}
 	}
 
+	headers = append(headers, "projectName")
+
 	writer.Write(headers)
 	for _, flattenedData := range flattenedDataArr {
 		row := make([]string, len(headers))
 		for i, header := range headers {
-			row[i] = flattenedData[header]
+			if header == "projectName" {
+				row[i] = projectName
+			} else {
+				row[i] = flattenedData[header]
+			}
 		}
 		writer.Write(row)
 	}
@@ -230,7 +368,7 @@ func fetchVmsData(apiClient *emmaSdk.APIClient, token string) ([]map[string]inte
 	return result, nil
 }
 
-func combineCsvFiles(filenames []string) (string, error) {
+func combineCsvFiles(filenames []string, resultFilename string) error {
 	headersFileMap, headersUniqueMap := collectHeaders(filenames)
 
 	headers := make([]string, 0)
@@ -238,10 +376,9 @@ func combineCsvFiles(filenames []string) (string, error) {
 		headers = append(headers, key)
 	}
 
-	resultFilename := fmt.Sprintf("report_%s.csv", time.Now().UTC().Format(time.RFC3339))
 	combinedFile, err := os.Create(resultFilename)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer combinedFile.Close()
 
@@ -251,11 +388,11 @@ func combineCsvFiles(filenames []string) (string, error) {
 
 	for _, filename := range filenames {
 		if err := writeRowsFromFiles(writer, filename, headers, headersFileMap[filename]); err != nil {
-			return "", err
+			return err
 		}
 		os.Remove(filename)
 	}
-	return resultFilename, nil
+	return nil
 }
 
 func collectHeaders(filenames []string) (map[string]map[string]int, map[string]struct{}) {
