@@ -134,7 +134,7 @@ func generateCSVHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resultFilename := "reports/vm-report.csv"
+	resultFilename := fmt.Sprintf("reports/vm-report_%s.csv", time.Now().UTC().Format(time.RFC3339))
 
 	err = combineCsvFiles(filenames, resultFilename)
 	if err != nil {
