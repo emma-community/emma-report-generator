@@ -126,14 +126,7 @@ func generateCSVHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	apiClient := emmaSdk.NewAPIClient(&emmaSdk.Configuration{
-		DefaultHeader: make(map[string]string),
-		UserAgent:     "OpenAPI-Generator/0.0.1/go",
-		Debug:         false,
-		Servers: emmaSdk.ServerConfigurations{
-			{URL: "https://customer-gateway.dev.emma.ms", Description: "Public EMMA API"},
-		},
-	})
+	apiClient := emmaSdk.NewAPIClient(emmaSdk.NewConfiguration())
 
 	filenames, err := processCredentials(apiClient, credentials)
 	if err != nil {
