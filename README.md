@@ -32,10 +32,30 @@ docker run -p 8080:8080 -e CREDENTIALS="$CREDENTIALS" emma-report-generator
 ### Accessing the Service
 Once the container is running, you can access the service at:
 ```shell
-http://localhost:8080/v1/generates
-http://localhost:8080/v1/files
-http://localhost:8080/v1/downloads
+curl -X POST localhost:8080/v1/generates
+curl localhost:8080/v1/files
+FILE=$(curl http://localhost:8080/v1/files | jq -r .files[0])
+curl localhost:8080/v1/downloads?file=$FILE
 ```
+
+## Kubernetes
+To start the service in a Kubernetes cluster apply the [k8s.yaml](k8s.yaml). This starts this service as a pod, makes it available as a K8s services and creates a Cronjob to generate a report every 6 hours.
+
+```shell
+kubectl apply -f k8s.yaml
+```
+
+To make the service available locally:
+```shell
+kubectl port-forward service/emma-report-service 8080:80 -n reporting
+```
+
+To debug the service from the cluster: 
+```shell
+kubectl run -i --tty debug-pod --image=alpine --restart=Never --rm -- /bin/sh -c "apk add --no-cache curl jq && sh"
+curl http://emma-report-service.reporting.svc.cluster.local:80/v1/files | jq .files[]
+```
+
 ## API Endpoint
 ### List Files
 - URL: /v1/files

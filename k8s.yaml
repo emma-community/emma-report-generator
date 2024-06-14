@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: reporting
+---  
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emma-report
+  namespace: reporting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: emma-report
+  template:
+    metadata:
+      labels:
+        app: emma-report
+    spec:
+      containers:
+      - name: emma-report
+        image: luebken/emma-report-generator:latest
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emma-report-service
+  namespace: reporting
+spec:
+  selector:
+    app: emma-report
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: generate-job
+  namespace: reporting
+spec:
+  schedule: "0 */6 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: curl-container
+            image: curlimages/curl:7.73.0
+            args:
+            - /bin/sh
+            - -c
+            - curl -X POST curl -X POST http://emma-report-service.reporting.svc.cluster.local:80/v1/generates  
+          restartPolicy: OnFailure
