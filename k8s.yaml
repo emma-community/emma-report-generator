@@ -37,3 +37,23 @@ spec:
     port: 80
     targetPort: 8080
   type: ClusterIP
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: generate-job
+  namespace: reporting
+spec:
+  schedule: "0 */6 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: curl-container
+            image: curlimages/curl:7.73.0
+            args:
+            - /bin/sh
+            - -c
+            - curl -X POST curl -X POST http://emma-report-service.reporting.svc.cluster.local:80/v1/generates  
+          restartPolicy: OnFailure
