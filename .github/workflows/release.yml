@@ -1,10 +1,17 @@
 name: Release Go project
 
 on:
+  # push:
+  #   tags:
+  #     - 'v*'
   push:
-    tags:
-      - 'v*'
+    branches:
+      - '*'
+      - '!main'
 
+env:
+  IMAGE_REGISTRY: public.ecr.aws/emma
+  IMAGE_NAME: emma-report-generator
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -19,13 +26,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.GH_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.GH_AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
       - name: Log in to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-        with:
-          region: ${{ secrets.AWS_REGION }}
-          access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push Docker image
         id: build-and-push
@@ -34,10 +44,10 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:${{ github.ref_name }}
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest
+            ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
       - name: Post build info
         run: |
           echo "The Docker image has been built and pushed to the ECR repository."
-          echo "Image URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:${{ github.ref_name }}"
+          echo "Image URL: ${{ env.IMAGE_NAME }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}"
