@@ -26,12 +26,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      # - name: Configure AWS Credentials
-      #   uses: aws-actions/configure-aws-credentials@v4
-      #   with:
-      #     aws-access-key-id: ${{ secrets.GH_AWS_ACCESS_KEY_ID }}
-      #     aws-secret-access-key: ${{ secrets.GH_AWS_SECRET_ACCESS_KEY }}
-      #     aws-region: eu-central-1
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.GH_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.GH_AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
 
       - name: Log in to Amazon ECR
         id: login-ecr-public
