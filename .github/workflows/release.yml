@@ -35,10 +35,9 @@ jobs:
 
       - name: Log in to Amazon ECR
         id: login-ecr-public
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
         with:
-          aws-region: eu-central-1
-          registry-type: 'public'
+          registry-type: public
 
       - name: Build and push Docker image
         id: build-and-push
