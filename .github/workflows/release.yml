@@ -1,18 +1,13 @@
 name: Release Go project
 
 on:
-  # push:
-  #   tags:
-  #     - 'v*'
   push:
-    branches:
-      - '*'
-      - '!main'
+    tags:
+      - 'v*'
 
 env:
   IMAGE_REGISTRY: public.ecr.aws/emma
   IMAGE_NAME: emma-report-generator
-  IMAGE_TAG: 0.0.0-${{ inputs.sha || github.sha }}
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -45,7 +40,7 @@ jobs:
           echo "Publish to docker registry"
           docker buildx build --push \
           --tag ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-          --tag ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+          --tag ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }} \
           -f Dockerfile .
 
       - name: Post build info
