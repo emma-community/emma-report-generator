@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+env:
+  IMAGE_REGISTRY: public.ecr.aws/emma
+  IMAGE_NAME: emma-report-generator
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -19,25 +22,28 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Log in to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          region: ${{ secrets.AWS_REGION }}
-          access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.GH_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.GH_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Log in to Amazon ECR
+        id: login-ecr-public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
 
       - name: Build and push Docker image
-        id: build-and-push
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:${{ github.ref_name }}
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:latest
+        run: |
+          echo "Publish to docker registry"
+          docker buildx build --push \
+          --tag ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+          --tag ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }} \
+          -f Dockerfile .
 
       - name: Post build info
         run: |
           echo "The Docker image has been built and pushed to the ECR repository."
-          echo "Image URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:${{ github.ref_name }}"
+          echo "Image URL: ${{ env.IMAGE_NAME }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}"
