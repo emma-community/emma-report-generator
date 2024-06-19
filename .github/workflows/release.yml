@@ -12,6 +12,7 @@ on:
 env:
   IMAGE_REGISTRY: public.ecr.aws/emma
   IMAGE_NAME: emma-report-generator
+  IMAGE_TAG: 0.0.0-${{ inputs.sha || github.sha }}
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -40,14 +41,12 @@ jobs:
           registry-type: public
 
       - name: Build and push Docker image
-        id: build-and-push
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-            ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        run: |
+          echo "Publish to docker registry"
+          docker buildx build --push \
+          --tag ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+          --tag ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+          -f Dockerfile .
 
       - name: Post build info
         run: |
