@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 env:
-  IMAGE_REGISTRY: public.ecr.aws/emma
+  IMAGE_REGISTRY: public.ecr.aws/emma-infra
   IMAGE_NAME: emma-report-generator
 jobs:
   build-and-push:
